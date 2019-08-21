@@ -1,6 +1,4 @@
-postgre_url = ''
-postgre_user = ''
-postgre_pass = ''
+postgre_url = 'postgresql://postgres:postgres@localhost:5432/shop'
 
 citizen_schem = {
     "type": "object",

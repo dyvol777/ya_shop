@@ -70,15 +70,15 @@ async def get_birthdays(request):
 @routes.get('/imports/{import_id}/towns/stat/percentile/age')
 async def get_stat(request):
     import_id = request.match_info['import_id']
-    towns = await Citizen.distinct(Citizen.town). \
-        select(Citizen.town).where(Citizen.request_id == import_id).gino.all()
+    towns = await Citizen.select('town').distinct(Citizen.town). \
+        where(Citizen.request_id == import_id).gino.all()
     result = []
     for town in towns:
-        birthdays = await Citizen.select(Citizen.birth_date). \
-            where(Citizen.town == town and Citizen.request_id == import_id).gino.all()
-        ages = [age(date.fromisoformat(birth)) / 365 for birth in birthdays]
+        birthdays = await Citizen.select('birth_date'). \
+            where(Citizen.town == town[0] and Citizen.request_id == import_id).gino.all()
+        ages = [age(birth[0]) for birth in birthdays]
         p50, p75, p99 = numpy.percentile(ages, [50, 75, 99])
-        result.append({'town': town, 'p50': p50, 'p75': p75, 'p99': p99})
+        result.append({'town': town[0], 'p50': p50, 'p75': p75, 'p99': p99})
     return web.json_response({'data': result})
 
 

@@ -36,7 +36,7 @@ class Citizen(db.Model):
     apartment = db.Column(db.Integer, nullable=False)
     name = db.Column(db.String(256), nullable=False)
     birth_date = db.Column(db.Date, nullable=False)
-    gender = db.Column(MyEnum(name='gender'))
+    gender = db.Column(db.Enum('male', 'female', name='gender'))
 
     _pk = db.Index('requestAndCitizen', 'request_id', 'citizen_id', unique=True)
 
