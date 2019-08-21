@@ -1,4 +1,6 @@
 from gino import Gino
+import asyncio
+from settigs import *
 
 db = Gino()
 
@@ -9,22 +11,22 @@ class MyEnum(db.Enum):
 
 
 relatives = db.Table('relatives',
-                     db.Column('request_id', db.String, db.ForeignKey('Citizen.request_id')),
-                     db.Column('first_id', db.Integer, db.ForeignKey('Citizen.citizen_id')),
-                     db.Column('second_id', db.Integer, db.ForeignKey('Citizen.citizen_id'))
+                     db.Column('request_id', db.String, db.ForeignKey('citizens.request_id')),
+                     db.Column('first_id', db.Integer, db.ForeignKey('citizens.citizen_id')),
+                     db.Column('second_id', db.Integer, db.ForeignKey('citizens.citizen_id'))
                      )
 
 
 class Request(db.Model):
     __tablename__ = 'requests'
-    id = db.Column(db.String)
-    data = db.Column(db.String)
+    id = db.Column(db.Integer, primary_key=True)
+    data = db.Column(db.JSONB())
 
 
 class Citizen(db.Model):
     __tablename__ = 'citizens'
 
-    request_id = db.ForeignKey('Requests.id')
+    request_id = db.ForeignKey('requests.id')
     citizen_id = db.Column(db.Integer, nullable=False)
     town = db.Column(db.String(256), nullable=False)
     street = db.Column(db.String(256), nullable=False)
@@ -37,3 +39,13 @@ class Citizen(db.Model):
     relatives: db.relationship("Citizen", secondary=relatives)
 
     _pk = db.PrimaryKeyConstraint('request_id', 'citizen_id', name='requestAndCitizen')
+
+
+async def main():
+    await db.set_bind(postgre_url)
+    await db.gino.create_all()
+    await db.pop_bind().close()
+
+
+if __name__ == '__main__':
+    asyncio.get_event_loop().run_until_complete(main())

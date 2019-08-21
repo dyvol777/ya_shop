@@ -1,2 +1,4 @@
 aiohttp
 gino
+numpy
+jsonschema
