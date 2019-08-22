@@ -12,7 +12,7 @@ class MyEnum(db.Enum):
 
 class Relatives(db.Model):
     __tablename__ = 'relatives'
-
+    request_id = db.Column(db.Integer, db.ForeignKey('requests.id'))
     first_id = db.Column(db.Integer, db.ForeignKey('citizens.id'))
     second_id = db.Column(db.Integer, db.ForeignKey('citizens.id'))
 

@@ -56,7 +56,7 @@ schema = {
     "required": ["citizens"]
 }
 
-ex = {
+example = {
     "citizens": [
         {
             "citizen_id": 1,
@@ -97,5 +97,4 @@ ex = {
 
 if __name__ == '__main__':
     from jsonschema import validate
-
-    validate(ex, schema)
+    validate(example, schema)
