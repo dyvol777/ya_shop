@@ -5,6 +5,7 @@ import json
 from jsonschema import validate
 import numpy
 import datetime
+import logging
 
 from models import Request, Citizen, Relatives, db
 from settigs import *
@@ -58,17 +59,17 @@ async def import_citizens(request):
         await Citizen.insert().gino.all(*[dict(**citizen, request_id=rq.id) for citizen in data['citizens']])
         citizens = {c.citizen_id: c.id for c in await Citizen.query.where(Citizen.request_id == rq.id).gino.all()}
         t2 = datetime.datetime.now() - n2
-        print(t2)
+        logging.debug('Creating all citizens on time: {}'.format(t2))
 
         await Relatives.insert().gino.all(
             *[dict(first_id=citizens[relation[0]], second_id=citizens[relation[1]], request_id=rq.id) for relation in
               relatives])
 
         t = datetime.datetime.now() - n
-        print(t)
+        logging.debug('All request completed on time: {}'.format(t))
         return web.HTTPCreated(body=json.dumps({'data': {'import_id': rq.id}}))
     except Exception as e:
-        print(e)
+        logging.exception('Post data exception')
         raise web.HTTPBadRequest()
 
 
@@ -78,7 +79,7 @@ async def modify_citizen(request):
         import_id = int(request.match_info['import_id'])
         citizen_id = int(request.match_info['citizen_id'])
         data = await request.json()
-        print(Citizen.query.where(Citizen.citizen_id == citizen_id).where(Citizen.request_id == import_id))
+
         cz = await Citizen.query.where(Citizen.citizen_id == citizen_id).where(
             Citizen.request_id == import_id).gino.first()
         if cz is None:
@@ -97,6 +98,7 @@ async def modify_citizen(request):
                 relatives.append(dict(first_id=citizens[relation], second_id=cz.id, request_id=import_id))
                 relatives.append(dict(first_id=cz.id, second_id=citizens[relation], request_id=import_id))
             await Relatives.insert().gino.all(*relatives)
+            rel = data.pop('relatives')
         await cz.update(**data).apply()
         result = cz.to_dict()
         result['relatives'] = rel
@@ -105,7 +107,7 @@ async def modify_citizen(request):
         result['birth_date'] = result['birth_date'].strftime("%d.%m.%Y")
         return web.json_response(result)
     except Exception as e:
-        print(e)
+        logging.exception('Patch exception')
         raise web.HTTPBadRequest()
 
 
@@ -114,32 +116,40 @@ async def get_all_citizens_by_import_id(request):
     try:
         import_id = request.match_info['import_id']
         founding_citizens = await Citizen.query.where(Citizen.request_id == int(import_id)).gino.all()
-        citizens = {f.id: f.citizen_id for f in founding_citizens}
+
+        relatives = await Citizen.join(Relatives, Citizen.id == Relatives.second_id).select().\
+            where(Relatives.request_id == int(import_id)).gino.all()
+
+        true_relatives = {}
+        for rel in relatives:
+            if rel.first_id in true_relatives:
+                true_relatives[rel.first_id].append(rel.citizen_id)
+            else:
+                true_relatives[rel.first_id] = [rel.citizen_id]
+
         data = {'data': []}
         for c in founding_citizens:
             cit_dict = c.to_dict()
             cit_dict.pop('id')
             cit_dict.pop('request_id')
             cit_dict['birth_date'] = cit_dict['birth_date'].strftime("%d.%m.%Y")
-
-            family = []
-            rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(
-                Citizen.id == c.id).gino.all() # fixme: получить все связи сразу и работать с ними
-            for f in rel:
-                family.append(citizens[f.second_id])
-            cit_dict['relatives'] = family
+            if c.id in true_relatives:
+                cit_dict['relatives'] = true_relatives[c.id]
+            else:
+                cit_dict['relatives'] =[]
 
             data['data'].append(cit_dict)
         return web.json_response(data=data)
-    except:
-        raise web.HTTPBadRequest
+    except Exception as e:
+        logging.exception('Get all exception')
+        raise web.HTTPBadRequest()
 
 
 @routes.get('/imports/{import_id}/citizens/birthdays')
 async def get_birthdays(request):
     try:
         import_id = int(request.match_info['import_id'])
-        citizens = {c.citizen_id: c.birth_date for c in
+        citizens = {c.id: c.birth_date for c in
                     await Citizen.query.where(Citizen.request_id == import_id).gino.all()}
 
         result = {
@@ -172,8 +182,9 @@ async def get_birthdays(request):
                 stat[str(month)].append({"citizen_id": k, "presents": v})
 
         return web.json_response({'data': stat})
-    except:
-        raise web.HTTPBadRequest
+    except Exception as e:
+        logging.exception('Get birthdays exception')
+        raise web.HTTPBadRequest()
 
 
 @routes.get('/imports/{import_id}/towns/stat/percentile/age')
@@ -194,8 +205,9 @@ async def get_stat(request):
             p50, p75, p99 = numpy.percentile(v, [50, 75, 99])
             result.append({'town': k, 'p50': p50, 'p75': p75, 'p99': p99})
         return web.json_response({'data': result})
-    except:
-        raise web.HTTPBadRequest
+    except Exception as e:
+        logging.exception('Get stat exception')
+        raise web.HTTPBadRequest()
 
 
 def main():
@@ -207,4 +219,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     main()

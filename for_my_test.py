@@ -6,37 +6,20 @@ import requests
 from settigs import example
 
 
-async def get_all(import_id):
-    await db.set_bind(postgre_url)
-    founding_citizens = await Citizen.query.where(Citizen.request_id == import_id).gino.all()
-    data = {'data': [c.to_dict() for c in founding_citizens]}
-    print(data)
-
-
-def test_get_all():
-    r = requests.get('http://localhost:8080/imports/14/citizens/birthdays')
-    print(r)
-
-
 def post_all():
     r = requests.post('http://localhost:8080/imports', json=example)
-    print(r)
+    print(r.text)
+    json.loads(r.text)
+    return json.loads(r.text)['data']['import_id']
 
 
-async def main():
-    await db.set_bind(postgre_url)
-    q = await Citizen.select('id').where(Citizen.citizen_id == 1 and Citizen.request_id == 1).gino.first()
-    rq = await Request.create(data='123')
-    id = 1
-
-    rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(Citizen.id == id).gino.all()
-    for i in rel:
-        a = i.second_id
-        pass
+def test_get_all(id):
+    r = requests.get(f'http://localhost:8080/imports/{id}/citizens/')
+    print(r.text)
 
 
-def make_patch():
-    r = requests.patch('http://localhost:8080/imports/1/citizens/1',
+def make_patch(id):
+    r = requests.patch(f'http://localhost:8080/imports/{id}/citizens/1',
                        json={"town": "Москва12",
                              "street": "Льва Толстого12",
                              "building": "16к7стр521",
@@ -46,7 +29,17 @@ def make_patch():
                              "relatives": []
                              }
                        )
-    print(r)
+    print(r.text)
+
+
+def test_get_birthdays(id):
+    r = requests.get(f'http://localhost:8080/imports/{id}/citizens/birthdays')
+    print(r.text)
+
+
+def test_get_stat(id):
+    r = requests.get(f'http://localhost:8080/imports/{id}/towns/stat/percentile/age')
+    print(r.text)
 
 
 def make_big_request():
@@ -72,5 +65,10 @@ def make_big_request():
 
 
 if __name__ == '__main__':
-    # asyncio.get_event_loop().run_until_complete(main())
-    post_all()
+    id = post_all()
+    test_get_all(id)
+    test_get_birthdays(id)
+    make_patch(id)
+    test_get_all(id)
+    test_get_birthdays(id)
+    test_get_stat(id)
