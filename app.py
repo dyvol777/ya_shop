@@ -132,7 +132,7 @@ async def get_all_citizens_by_import_id(request):
 
             family = []
             for f in rel:
-                cit_id = await Citizen.select('citizen_id').where(Citizen.id == int(f.second_id)).gino.first()
+                cit_id = await Citizen.select('citizen_id').where(Citizen.id == int(f.second_id)).gino.first() # todo: remove second request
                 family.append(cit_id[0])
             cit_dict['relatives'] = family
 
@@ -190,7 +190,7 @@ async def get_stat(request):
         result = []
         for town in towns:
             birthdays = await Citizen.select('birth_date'). \
-                where(Citizen.town == town[0] and Citizen.request_id == import_id).gino.all()
+                where(Citizen.town == town[0]).where(Citizen.request_id == import_id).gino.all()
             ages = [age(birth[0]) for birth in birthdays]
             p50, p75, p99 = numpy.percentile(ages, [50, 75, 99])
             result.append({'town': town[0], 'p50': p50, 'p75': p75, 'p99': p99})
