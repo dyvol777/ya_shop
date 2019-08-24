@@ -53,20 +53,17 @@ async def import_citizens(request):
             raise web.HTTPBadRequest()
 
         rq = await Request.create(date=datetime.datetime.now())
-        citizens = {}
-        n2 = datetime.datetime.now()
-        for citizen in data['citizens']:
-            cz = await Citizen.create(**citizen, request_id=rq.id)
-            citizens[cz.citizen_id] = cz.id
 
+        n2 = datetime.datetime.now()
+        await Citizen.insert().gino.all(*[dict(**citizen, request_id=rq.id) for citizen in data['citizens']])
+        citizens = {c.citizen_id: c.id for c in await Citizen.query.where(Citizen.request_id == rq.id).gino.all()}
         t2 = datetime.datetime.now() - n2
         print(t2)
-        for relation in relatives:
-            f_id = citizens[relation[0]]
-            s_id = citizens[relation[1]]
-            await Relatives.create(first_id=f_id,
-                                   second_id=s_id,
-                                   request_id=rq.id)
+
+        await Relatives.insert().gino.all(
+            *[dict(first_id=citizens[relation[0]], second_id=citizens[relation[1]], request_id=rq.id) for relation in
+              relatives])
+
         t = datetime.datetime.now() - n
         print(t)
         return web.HTTPCreated(body=json.dumps({'data': {'import_id': rq.id}}))
@@ -93,16 +90,13 @@ async def modify_citizen(request):
         if 'relatives' in data:
             await Relatives.delete.where(Relatives.first_id == cz.id).gino.status()
             await Relatives.delete.where(Relatives.second_id == cz.id).gino.status()
+            citizens = {c.citizen_id: c.id for c in
+                        await Citizen.query.where(Citizen.request_id == import_id).gino.all()}
+            relatives = []
             for relation in data['relatives']:
-                relative_id = await Citizen.select('id').where(Citizen.citizen_id == relation). \
-                    where(Citizen.request_id == import_id).gino.first()
-                await Relatives.create(first_id=relative_id[0],
-                                       second_id=cz.id,
-                                       request_id=import_id)
-                await Relatives.create(second_id=relative_id[0],
-                                       first_id=cz.id,
-                                       request_id=import_id)
-            rel = data.pop('relatives')
+                relatives.append(dict(first_id=citizens[relation], second_id=cz.id, request_id=import_id))
+                relatives.append(dict(first_id=cz.id, second_id=citizens[relation], request_id=import_id))
+            await Relatives.insert().gino.all(*relatives)
         await cz.update(**data).apply()
         result = cz.to_dict()
         result['relatives'] = rel
@@ -120,20 +114,19 @@ async def get_all_citizens_by_import_id(request):
     try:
         import_id = request.match_info['import_id']
         founding_citizens = await Citizen.query.where(Citizen.request_id == int(import_id)).gino.all()
-
+        citizens = {f.id: f.citizen_id for f in founding_citizens}
         data = {'data': []}
         for c in founding_citizens:
-            rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(
-                Citizen.id == c.id).gino.all()
             cit_dict = c.to_dict()
             cit_dict.pop('id')
             cit_dict.pop('request_id')
             cit_dict['birth_date'] = cit_dict['birth_date'].strftime("%d.%m.%Y")
 
             family = []
+            rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(
+                Citizen.id == c.id).gino.all() # fixme: получить все связи сразу и работать с ними
             for f in rel:
-                cit_id = await Citizen.select('citizen_id').where(Citizen.id == int(f.second_id)).gino.first() # todo: remove second request
-                family.append(cit_id[0])
+                family.append(citizens[f.second_id])
             cit_dict['relatives'] = family
 
             data['data'].append(cit_dict)
@@ -146,8 +139,9 @@ async def get_all_citizens_by_import_id(request):
 async def get_birthdays(request):
     try:
         import_id = int(request.match_info['import_id'])
-        ids = await Relatives.join(Citizen, Citizen.id == Relatives.first_id).select().where(
-            Relatives.request_id == import_id).gino.all()
+        citizens = {c.citizen_id: c.birth_date for c in
+                    await Citizen.query.where(Citizen.request_id == import_id).gino.all()}
+
         result = {
             1: {},
             2: {},
@@ -163,9 +157,10 @@ async def get_birthdays(request):
             12: {}
         }
 
+        ids = await Relatives.join(Citizen, Citizen.id == Relatives.first_id).select().where(
+            Relatives.request_id == import_id).gino.all()
         for cit in ids:
-            cz = await Citizen.query.where(Citizen.id == cit.second_id).gino.first() # todo: second join and don't need second request
-            month = cz.birth_date.month
+            month = citizens[cit.second_id].month
             if cit.citizen_id in result[month]:
                 result[month][cit.citizen_id] += 1
             else:
@@ -185,15 +180,19 @@ async def get_birthdays(request):
 async def get_stat(request):
     try:
         import_id = int(request.match_info['import_id'])
-        towns = await Citizen.select('town').distinct(Citizen.town). \
-            where(Citizen.request_id == import_id).gino.all()
+
+        citizens = await Citizen.query.where(Citizen.request_id == import_id).gino.all()
+        town_stat = {}
+        for citizen in citizens:
+            if citizen.town in town_stat:
+                town_stat[citizen.town].append(age(citizen.birth_date))
+            else:
+                town_stat[citizen.town] = [age(citizen.birth_date)]
+
         result = []
-        for town in towns:
-            birthdays = await Citizen.select('birth_date'). \
-                where(Citizen.town == town[0]).where(Citizen.request_id == import_id).gino.all()
-            ages = [age(birth[0]) for birth in birthdays]
-            p50, p75, p99 = numpy.percentile(ages, [50, 75, 99])
-            result.append({'town': town[0], 'p50': p50, 'p75': p75, 'p99': p99})
+        for k, v in town_stat.items():
+            p50, p75, p99 = numpy.percentile(v, [50, 75, 99])
+            result.append({'town': k, 'p50': p50, 'p75': p75, 'p99': p99})
         return web.json_response({'data': result})
     except:
         raise web.HTTPBadRequest

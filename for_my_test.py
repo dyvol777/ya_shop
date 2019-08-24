@@ -61,7 +61,7 @@ def make_big_request():
             "name": "Иванов Иван Иванович",
             "birth_date": "26.12.1986",
             "gender": "male",
-            "relatives": []
+            "relatives": [i]
         } for i in range(10**4)]
     }
                       )
@@ -73,4 +73,4 @@ def make_big_request():
 
 if __name__ == '__main__':
     # asyncio.get_event_loop().run_until_complete(main())
-    test_get_all()
+    post_all()
