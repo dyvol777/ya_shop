@@ -32,8 +32,9 @@ def test_get_all():
     r = requests.get('http://localhost:8080/imports/8/towns/stat/percentile/age')
     print(r)
 
+
 def post_all():
-    r = requests.post('http://localhost:8080/imports', data=json.dumps(example))
+    r = requests.post('http://localhost:8080/imports', json=example)
     print(r)
 
 
@@ -49,6 +50,19 @@ async def main():
         pass
 
 
+def make_patch():
+    r = requests.patch('http://localhost:8080/imports/1/citizens/1',
+                       json={"town": "Москва12",
+                             "street": "Льва Толстого12",
+                             "building": "16к7стр521",
+                             "apartment": 12,
+                             "name": "Иванов Иван Иванович21",
+                             "birth_date": "2.12.1986",
+                             "relatives": []
+                             }
+                       )
+    print(r)
+
 if __name__ == '__main__':
-    #asyncio.get_event_loop().run_until_complete(main())
-    post_all()
+    # asyncio.get_event_loop().run_until_complete(main())
+    make_patch()

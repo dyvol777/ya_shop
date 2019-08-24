@@ -70,29 +70,41 @@ async def import_citizens(request):
 
 @routes.patch('/imports/{import_id}/citizens/{citizen_id}')
 async def modify_citizen(request):
-    import_id = request.match_info['import_id']
-    citizen_id = request.match_info['citizen_id']
-    cz = await Citizen.query.where(Citizen.citizen_id == citizen_id and Citizen.request_id == import_id).gino.first()
-    data = request.json()
-    rel = []
-    if 'relatives' in data:
-        Relatives.delete.where(Relatives.first_id == cz.id or Relatives.second_id == cz.id).gino.status()
-        async for relation in data['relatives']:
-            await Relatives.create(first_id=await Citizen.selecet('id').
-                                   where(Citizen.citizen_id == relation
-                                         and Citizen.request_id == import_id).gino.first(),
-                                   second_id=cz.id,
-                                   request_id=import_id)
-            await Relatives.create(second_id=await Citizen.selecet('id').
-                                   where(Citizen.citizen_id == relation
-                                         and Citizen.request_id == import_id).gino.first(),
-                                   first_id=cz.id,
-                                   request_id=import_id)
-        rel = data.pop('relatives')
-    await cz.update(**request.data).apply()
-    result = cz.to_dict()
-    result['relatives'] = rel
-    return web.json_response(result)
+    try:
+        import_id = int(request.match_info['import_id'])
+        citizen_id = int(request.match_info['citizen_id'])
+        data = await request.json()
+        print(Citizen.query.where(Citizen.citizen_id == citizen_id).where(Citizen.request_id == import_id))
+        cz = await Citizen.query.where(Citizen.citizen_id == citizen_id).where(Citizen.request_id == import_id).gino.first()
+        if cz is None:
+            raise web.HTTPBadRequest()
+
+        rel = []
+        if 'birth_date' in data:
+            data['birth_date'] = datetime.datetime.strptime(data['birth_date'], '%d.%m.%Y').date()
+        if 'relatives' in data:
+            await Relatives.delete.where(Relatives.first_id == cz.id).gino.status()
+            await Relatives.delete.where(Relatives.second_id == cz.id).gino.status()
+            for relation in data['relatives']:
+                relative_id = await Citizen.select('id').where(Citizen.citizen_id == relation).\
+                    where(Citizen.request_id == import_id).gino.first()
+                await Relatives.create(first_id=relative_id[0],
+                                       second_id=cz.id,
+                                       request_id=import_id)
+                await Relatives.create(second_id=relative_id[0],
+                                       first_id=cz.id,
+                                       request_id=import_id)
+            rel = data.pop('relatives')
+        await cz.update(**data).apply()
+        result = cz.to_dict()
+        result['relatives'] = rel
+        result.pop('id')
+        result.pop('request_id')
+        result['birth_date'] = result['birth_date'].strftime("%d.%m.%Y")
+        return web.json_response(result)
+    except Exception as e:
+        print(e)
+        raise web.HTTPBadRequest()
 
 
 @routes.get('/imports/{import_id}/citizens/')
