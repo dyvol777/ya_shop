@@ -1,8 +1,6 @@
 postgre_url = 'postgresql://postgres:postgres@localhost:5432/shop'
 
-citizen_schem = {
-    "type": "object",
-    "properties": {
+props = {
         "citizen_id": {"type": "integer"},
         "town": {"type": "string",
                  "minLength": 1,
@@ -29,7 +27,11 @@ citizen_schem = {
             "type": "array",
             "items": {"type": "integer"}
         },
-    },
+    }
+
+citizen_schem = {
+    "type": "object",
+    "properties": props,
     "required": [
         "citizen_id",
         "town",
@@ -41,6 +43,11 @@ citizen_schem = {
         "gender",
         "relatives",
     ]
+}
+
+patch_schem = {
+    "type": "object",
+    "properties": props
 }
 
 schema = {
@@ -55,46 +62,3 @@ schema = {
     },
     "required": ["citizens"]
 }
-
-example = {
-    "citizens": [
-        {
-            "citizen_id": 1,
-            "town": "Москва",
-            "street": "Льва Толстого",
-            "building": "16к7стр5",
-            "apartment": 7,
-            "name": "Иванов Иван Иванович",
-            "birth_date": "26.12.1986",
-            "gender": "male",
-            "relatives": [2]
-        },
-        {
-            "citizen_id": 2,
-            "town": "Москва",
-            "street": "Льва Толстого",
-            "building": "16к7стр5",
-            "apartment": 7,
-            "name": "Иванов Сергей Иванович",
-            "birth_date": "01.04.1997",
-            "gender": "male",
-            "relatives": [1]
-        },
-        {
-            "citizen_id": 3,
-            "town": "Керчь",
-            "street": "Иосифа Бродского",
-            "building": "2",
-            "apartment": 11,
-            "name": "Романова Мария Леонидовна",
-            "birth_date": "20.11.1986",
-            "gender": "female",
-            "relatives": []
-        },
-
-    ]
-}
-
-if __name__ == '__main__':
-    from jsonschema import validate
-    validate(example, schema)

@@ -1,6 +1,4 @@
-import asyncio
 from aiohttp import web
-from gino.ext.aiohttp import Gino
 import json
 from jsonschema import validate
 import numpy
@@ -50,6 +48,8 @@ async def import_citizens(request):
                     relatives.append((citizen['citizen_id'], f))
             citizen.pop('relatives')
             citizen['birth_date'] = datetime.datetime.strptime(citizen['birth_date'], '%d.%m.%Y').date()
+            if citizen['birth_date'] > datetime.date.today():
+                raise web.HTTPBadRequest()
         if check != 0:
             raise web.HTTPBadRequest()
 
@@ -79,6 +79,7 @@ async def modify_citizen(request):
         import_id = int(request.match_info['import_id'])
         citizen_id = int(request.match_info['citizen_id'])
         data = await request.json()
+        validate(data, patch_schem)
 
         cz = await Citizen.query.where(Citizen.citizen_id == citizen_id).where(
             Citizen.request_id == import_id).gino.first()
@@ -88,6 +89,8 @@ async def modify_citizen(request):
         rel = []
         if 'birth_date' in data:
             data['birth_date'] = datetime.datetime.strptime(data['birth_date'], '%d.%m.%Y').date()
+            if data['birth_date'] > datetime.date.today():
+                raise web.HTTPBadRequest()
         if 'relatives' in data:
             await Relatives.delete.where(Relatives.first_id == cz.id).gino.status()
             await Relatives.delete.where(Relatives.second_id == cz.id).gino.status()
@@ -117,7 +120,7 @@ async def get_all_citizens_by_import_id(request):
         import_id = request.match_info['import_id']
         founding_citizens = await Citizen.query.where(Citizen.request_id == int(import_id)).gino.all()
 
-        relatives = await Citizen.join(Relatives, Citizen.id == Relatives.second_id).select().\
+        relatives = await Citizen.join(Relatives, Citizen.id == Relatives.second_id).select(). \
             where(Relatives.request_id == int(import_id)).gino.all()
 
         true_relatives = {}
@@ -136,7 +139,7 @@ async def get_all_citizens_by_import_id(request):
             if c.id in true_relatives:
                 cit_dict['relatives'] = true_relatives[c.id]
             else:
-                cit_dict['relatives'] =[]
+                cit_dict['relatives'] = []
 
             data['data'].append(cit_dict)
         return web.json_response(data=data)
@@ -202,7 +205,7 @@ async def get_stat(request):
 
         result = []
         for k, v in town_stat.items():
-            p50, p75, p99 = numpy.percentile(v, [50, 75, 99])
+            p50, p75, p99 = numpy.percentile(v, [50, 75, 99], interpolation='linear')
             result.append({'town': k, 'p50': p50, 'p75': p75, 'p99': p99})
         return web.json_response({'data': result})
     except Exception as e:
@@ -211,6 +214,7 @@ async def get_stat(request):
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     app = web.Application(middlewares=[db], client_max_size=1024 ** 3)
     db.init_app(app, config={'password': 'postgres',
                              'database': 'shop'})
@@ -219,5 +223,4 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
     main()
