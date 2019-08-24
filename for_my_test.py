@@ -1,24 +1,9 @@
 from models import *
-from datetime import date
+from datetime import datetime
 import numpy
 import json
 import requests
 from settigs import example
-
-
-async def perc(import_id):
-    await db.set_bind(postgre_url)
-
-    towns = await Citizen.select('town').distinct(Citizen.town). \
-        where(Citizen.request_id == import_id).gino.all()
-    result = []
-    for town in towns:
-        birthdays = await Citizen.select('birth_date'). \
-            where(Citizen.town == town[0] and Citizen.request_id == import_id).gino.all()
-        ages = [age(birth[0]) for birth in birthdays]
-        p50, p75, p99 = numpy.percentile(ages, [50, 75, 99])
-        result.append({'town': town[0], 'p50': p50, 'p75': p75, 'p99': p99})
-    print(result)
 
 
 async def get_all(import_id):
@@ -29,7 +14,7 @@ async def get_all(import_id):
 
 
 def test_get_all():
-    r = requests.get('http://localhost:8080/imports/8/towns/stat/percentile/age')
+    r = requests.get('http://localhost:8080/imports/14/citizens/birthdays')
     print(r)
 
 
@@ -63,6 +48,29 @@ def make_patch():
                        )
     print(r)
 
+
+def make_big_request():
+    n = datetime.now()
+    r = requests.post('http://localhost:8080/imports', json={"citizens": [
+        {
+            "citizen_id": i,
+            "town": "Москва",
+            "street": "Льва Толстого",
+            "building": "16к7стр5",
+            "apartment": 7,
+            "name": "Иванов Иван Иванович",
+            "birth_date": "26.12.1986",
+            "gender": "male",
+            "relatives": []
+        } for i in range(10**4)]
+    }
+                      )
+    t = datetime.now() - n
+    print(r)
+    print(t)
+    pass
+
+
 if __name__ == '__main__':
     # asyncio.get_event_loop().run_until_complete(main())
-    make_patch()
+    test_get_all()

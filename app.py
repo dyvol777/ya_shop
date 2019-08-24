@@ -32,6 +32,7 @@ def age(dob):
 async def import_citizens(request):
     try:
         data = await request.json()
+        n = datetime.datetime.now()
         validate(data, schema)
 
         relatives = []
@@ -52,16 +53,22 @@ async def import_citizens(request):
             raise web.HTTPBadRequest()
 
         rq = await Request.create(date=datetime.datetime.now())
+        citizens = {}
+        n2 = datetime.datetime.now()
         for citizen in data['citizens']:
-            await Citizen.create(**citizen, request_id=rq.id)
+            cz = await Citizen.create(**citizen, request_id=rq.id)
+            citizens[cz.citizen_id] = cz.id
+
+        t2 = datetime.datetime.now() - n2
+        print(t2)
         for relation in relatives:
-            f_id = await Citizen.select('id').\
-                where(Citizen.citizen_id == relation[0]).where(Citizen.request_id == rq.id).gino.first()
-            s_id = await Citizen.select('id').\
-                where(Citizen.citizen_id == relation[1]).where(Citizen.request_id == rq.id).gino.first()
-            await Relatives.create(first_id=f_id[0],
-                                   second_id=s_id[0],
+            f_id = citizens[relation[0]]
+            s_id = citizens[relation[1]]
+            await Relatives.create(first_id=f_id,
+                                   second_id=s_id,
                                    request_id=rq.id)
+        t = datetime.datetime.now() - n
+        print(t)
         return web.HTTPCreated(body=json.dumps({'data': {'import_id': rq.id}}))
     except Exception as e:
         print(e)
@@ -75,7 +82,8 @@ async def modify_citizen(request):
         citizen_id = int(request.match_info['citizen_id'])
         data = await request.json()
         print(Citizen.query.where(Citizen.citizen_id == citizen_id).where(Citizen.request_id == import_id))
-        cz = await Citizen.query.where(Citizen.citizen_id == citizen_id).where(Citizen.request_id == import_id).gino.first()
+        cz = await Citizen.query.where(Citizen.citizen_id == citizen_id).where(
+            Citizen.request_id == import_id).gino.first()
         if cz is None:
             raise web.HTTPBadRequest()
 
@@ -86,7 +94,7 @@ async def modify_citizen(request):
             await Relatives.delete.where(Relatives.first_id == cz.id).gino.status()
             await Relatives.delete.where(Relatives.second_id == cz.id).gino.status()
             for relation in data['relatives']:
-                relative_id = await Citizen.select('id').where(Citizen.citizen_id == relation).\
+                relative_id = await Citizen.select('id').where(Citizen.citizen_id == relation). \
                     where(Citizen.request_id == import_id).gino.first()
                 await Relatives.create(first_id=relative_id[0],
                                        second_id=cz.id,
@@ -109,70 +117,90 @@ async def modify_citizen(request):
 
 @routes.get('/imports/{import_id}/citizens/')
 async def get_all_citizens_by_import_id(request):
-    import_id = request.match_info['import_id']
-    founding_citizens = await Citizen.query.where(Citizen.request_id == int(import_id)).gino.all()
+    try:
+        import_id = request.match_info['import_id']
+        founding_citizens = await Citizen.query.where(Citizen.request_id == int(import_id)).gino.all()
 
-    data = {'data': []}
-    for c in founding_citizens:
-        rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(
-            Citizen.id == c.id).gino.all()
-        cit_dict = c.to_dict()
-        cit_dict.pop('id')
-        cit_dict.pop('request_id')
-        cit_dict['birth_date'] = cit_dict['birth_date'].strftime("%d.%m.%Y")
+        data = {'data': []}
+        for c in founding_citizens:
+            rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(
+                Citizen.id == c.id).gino.all()
+            cit_dict = c.to_dict()
+            cit_dict.pop('id')
+            cit_dict.pop('request_id')
+            cit_dict['birth_date'] = cit_dict['birth_date'].strftime("%d.%m.%Y")
 
-        family = []
-        for f in rel:
-            cit_id = await Citizen.select('citizen_id').where(Citizen.id == int(f.second_id)).gino.first()
-            family.append(cit_id[0])
-        cit_dict['relatives'] = family
+            family = []
+            for f in rel:
+                cit_id = await Citizen.select('citizen_id').where(Citizen.id == int(f.second_id)).gino.first()
+                family.append(cit_id[0])
+            cit_dict['relatives'] = family
 
-        data['data'].append(cit_dict)
-    return web.json_response(data=data)
+            data['data'].append(cit_dict)
+        return web.json_response(data=data)
+    except:
+        raise web.HTTPBadRequest
 
 
 @routes.get('/imports/{import_id}/citizens/birthdays')
 async def get_birthdays(request):
-    import_id = request.match_info['import_id']
-    result = {
-        "1": [],
-        "2": [],
-        "3": [],
-        "4": [],
-        "5": [],
-        "6": [],
-        "7": [],
-        "8": [],
-        "9": [],
-        "10": [],
-        "11": [],
-        "12": []
-    }
+    try:
+        import_id = int(request.match_info['import_id'])
+        ids = await Relatives.join(Citizen, Citizen.id == Relatives.first_id).select().where(
+            Relatives.request_id == import_id).gino.all()
+        result = {
+            1: {},
+            2: {},
+            3: {},
+            4: {},
+            5: {},
+            6: {},
+            7: {},
+            8: {},
+            9: {},
+            10: {},
+            11: {},
+            12: {}
+        }
 
-    founding_citizens = await Citizen.query.where(Citizen.request_id == import_id).gino.all()
-    for citizen in founding_citizens:
-        if citizen.relatives:
-            pass  # todo:make it work
-    return web.json_response()
+        for cit in ids:
+            cz = await Citizen.query.where(Citizen.id == cit.second_id).gino.first() # todo: second join and don't need second request
+            month = cz.birth_date.month
+            if cit.citizen_id in result[month]:
+                result[month][cit.citizen_id] += 1
+            else:
+                result[month][cit.citizen_id] = 1
+        stat = {}
+        for month, d in result.items():
+            stat[str(month)] = []
+            for k, v in d.items():
+                stat[str(month)].append({"citizen_id": k, "presents": v})
+
+        return web.json_response({'data': stat})
+    except:
+        raise web.HTTPBadRequest
 
 
 @routes.get('/imports/{import_id}/towns/stat/percentile/age')
 async def get_stat(request):
-    import_id = int(request.match_info['import_id'])
-    towns = await Citizen.select('town').distinct(Citizen.town). \
-        where(Citizen.request_id == import_id).gino.all()
-    result = []
-    for town in towns:
-        birthdays = await Citizen.select('birth_date'). \
-            where(Citizen.town == town[0] and Citizen.request_id == import_id).gino.all()
-        ages = [age(birth[0]) for birth in birthdays]
-        p50, p75, p99 = numpy.percentile(ages, [50, 75, 99])
-        result.append({'town': town[0], 'p50': p50, 'p75': p75, 'p99': p99})
-    return web.json_response({'data': result})
+    try:
+        import_id = int(request.match_info['import_id'])
+        towns = await Citizen.select('town').distinct(Citizen.town). \
+            where(Citizen.request_id == import_id).gino.all()
+        result = []
+        for town in towns:
+            birthdays = await Citizen.select('birth_date'). \
+                where(Citizen.town == town[0] and Citizen.request_id == import_id).gino.all()
+            ages = [age(birth[0]) for birth in birthdays]
+            p50, p75, p99 = numpy.percentile(ages, [50, 75, 99])
+            result.append({'town': town[0], 'p50': p50, 'p75': p75, 'p99': p99})
+        return web.json_response({'data': result})
+    except:
+        raise web.HTTPBadRequest
 
 
 def main():
-    app = web.Application(middlewares=[db])
+    app = web.Application(middlewares=[db], client_max_size=1024 ** 3)
     db.init_app(app, config={'password': 'postgres',
                              'database': 'shop'})
     app.add_routes(routes)
