@@ -6,7 +6,7 @@ from jsonschema import validate
 import numpy
 import datetime
 
-from models import Request, Citizen, Relatives
+from models import Request, Citizen, Relatives, db
 from settigs import *
 
 routes = web.RouteTableDef()
@@ -31,7 +31,7 @@ def age(dob):
 @routes.post('/imports')
 async def import_citizens(request):
     try:
-        data = json.loads(request.data)
+        data = await request.json()
         validate(data, schema)
 
         relatives = []
@@ -47,22 +47,24 @@ async def import_citizens(request):
                         check += 1
                     relatives.append((citizen['citizen_id'], f))
             citizen.pop('relatives')
+            citizen['birth_date'] = datetime.datetime.strptime(citizen['birth_date'], '%d.%m.%Y').date()
         if check != 0:
             raise web.HTTPBadRequest()
 
-        rq = await Request.create(data=request.data)
+        rq = await Request.create(date=datetime.datetime.now())
         for citizen in data['citizens']:
             await Citizen.create(**citizen, request_id=rq.id)
         for relation in relatives:
-            await Relatives.create(first_id=await Citizen.selecet('id').
-                                   where(Citizen.citizen_id == relation[0]
-                                         and Citizen.request_id == rq.id).gino.first(),
-                                   second_id=await Citizen.selecet('id').
-                                   where(Citizen.citizen_id == relation[1]
-                                         and Citizen.request_id == rq.id).gino.first(),
+            f_id = await Citizen.select('id').\
+                where(Citizen.citizen_id == relation[0]).where(Citizen.request_id == rq.id).gino.first()
+            s_id = await Citizen.select('id').\
+                where(Citizen.citizen_id == relation[1]).where(Citizen.request_id == rq.id).gino.first()
+            await Relatives.create(first_id=f_id[0],
+                                   second_id=s_id[0],
                                    request_id=rq.id)
-        return web.HTTPCreated(body={'data': {'import_id': rq.id}})
-    except:
+        return web.HTTPCreated(body=json.dumps({'data': {'import_id': rq.id}}))
+    except Exception as e:
+        print(e)
         raise web.HTTPBadRequest()
 
 
@@ -71,7 +73,7 @@ async def modify_citizen(request):
     import_id = request.match_info['import_id']
     citizen_id = request.match_info['citizen_id']
     cz = await Citizen.query.where(Citizen.citizen_id == citizen_id and Citizen.request_id == import_id).gino.first()
-    data = json.loads(request.data)
+    data = request.json()
     rel = []
     if 'relatives' in data:
         Relatives.delete.where(Relatives.first_id == cz.id or Relatives.second_id == cz.id).gino.status()
@@ -96,16 +98,25 @@ async def modify_citizen(request):
 @routes.get('/imports/{import_id}/citizens/')
 async def get_all_citizens_by_import_id(request):
     import_id = request.match_info['import_id']
-    founding_citizens = await Citizen.query.where(Citizen.request_id == import_id).gino.all()
+    founding_citizens = await Citizen.query.where(Citizen.request_id == int(import_id)).gino.all()
 
     data = {'data': []}
     for c in founding_citizens:
-        rel = await Relatives.join(Citizen.on(Citizen.id == Relatives.second_id)).select('citizen_id').where(Relatives.first_id == c.id).gino.all()
+        rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(
+            Citizen.id == c.id).gino.all()
         cit_dict = c.to_dict()
-        cit_dict['relatives'] = rel
         cit_dict.pop('id')
+        cit_dict.pop('request_id')
+        cit_dict['birth_date'] = cit_dict['birth_date'].strftime("%d.%m.%Y")
+
+        family = []
+        for f in rel:
+            cit_id = await Citizen.select('citizen_id').where(Citizen.id == int(f.second_id)).gino.first()
+            family.append(cit_id[0])
+        cit_dict['relatives'] = family
+
         data['data'].append(cit_dict)
-    return web.json_response(json.dumps(data))
+    return web.json_response(data=data)
 
 
 @routes.get('/imports/{import_id}/citizens/birthdays')
@@ -135,7 +146,7 @@ async def get_birthdays(request):
 
 @routes.get('/imports/{import_id}/towns/stat/percentile/age')
 async def get_stat(request):
-    import_id = request.match_info['import_id']
+    import_id = int(request.match_info['import_id'])
     towns = await Citizen.select('town').distinct(Citizen.town). \
         where(Citizen.request_id == import_id).gino.all()
     result = []
@@ -149,10 +160,9 @@ async def get_stat(request):
 
 
 def main():
-    db = Gino()
     app = web.Application(middlewares=[db])
-    app['config'] = {'dsn': postgre_url}
-    db.init_app(app)
+    db.init_app(app, config={'password': 'postgres',
+                             'database': 'shop'})
     app.add_routes(routes)
     web.run_app(app)
 

@@ -20,7 +20,7 @@ class Relatives(db.Model):
 class Request(db.Model):
     __tablename__ = 'requests'
     id = db.Column(db.Integer, primary_key=True)
-    data = db.Column(db.String())
+    date = db.Column(db.DateTime, nullable=False)
 
 
 class Citizen(db.Model):

@@ -20,7 +20,7 @@ citizen_schem = {
                  "maxLength": 256},
         "birth_date": {"type": "string",
                        "format": "date"
-                       },  # TODO: make date validate
+                       },
         "gender": {
             "type": "string",
             "enum": ["male", "female"]
@@ -87,7 +87,7 @@ example = {
             "building": "2",
             "apartment": 11,
             "name": "Романова Мария Леонидовна",
-            "birth_date": "40.11.1986",
+            "birth_date": "20.11.1986",
             "gender": "female",
             "relatives": []
         },

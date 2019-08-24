@@ -3,6 +3,7 @@ from datetime import date
 import numpy
 import json
 import requests
+from settigs import example
 
 
 async def perc(import_id):
@@ -27,6 +28,27 @@ async def get_all(import_id):
     print(data)
 
 
-if __name__ == '__main__':
-    r = requests.get('http://localhost:8080/imports/1/citizens/')
+def test_get_all():
+    r = requests.get('http://localhost:8080/imports/8/towns/stat/percentile/age')
     print(r)
+
+def post_all():
+    r = requests.post('http://localhost:8080/imports', data=json.dumps(example))
+    print(r)
+
+
+async def main():
+    await db.set_bind(postgre_url)
+    q = await Citizen.select('id').where(Citizen.citizen_id == 1 and Citizen.request_id == 1).gino.first()
+    rq = await Request.create(data='123')
+    id = 1
+
+    rel = await Citizen.join(Relatives, Citizen.id == Relatives.first_id).select().where(Citizen.id == id).gino.all()
+    for i in rel:
+        a = i.second_id
+        pass
+
+
+if __name__ == '__main__':
+    #asyncio.get_event_loop().run_until_complete(main())
+    post_all()
