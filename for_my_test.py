@@ -1,7 +1,7 @@
 from datetime import datetime
 import json
 import requests
-
+ip = 'http://84.201.136.227:8080'
 
 example = {
     "citizens": [
@@ -44,19 +44,19 @@ example = {
 
 
 def post_all():
-    r = requests.post('http://localhost:8080/imports', json=example)
+    r = requests.post(f'{ip}/imports', json=example)
     print(r.text)
     json.loads(r.text)
     return json.loads(r.text)['data']['import_id']
 
 
 def test_get_all(id):
-    r = requests.get(f'http://localhost:8080/imports/{id}/citizens/')
+    r = requests.get(f'{ip}/imports/{id}/citizens/')
     print(r.text)
 
 
 def make_patch(id):
-    r = requests.patch(f'http://localhost:8080/imports/{id}/citizens/1',
+    r = requests.patch(f'{ip}/imports/{id}/citizens/1',
                        json={"town": "Москва12",
                              "street": "Льва Толстого12",
                              "building": "16к7стр521",
@@ -70,18 +70,18 @@ def make_patch(id):
 
 
 def test_get_birthdays(id):
-    r = requests.get(f'http://localhost:8080/imports/{id}/citizens/birthdays')
+    r = requests.get(f'{ip}/imports/{id}/citizens/birthdays')
     print(r.text)
 
 
 def test_get_stat(id):
-    r = requests.get(f'http://localhost:8080/imports/{id}/towns/stat/percentile/age')
+    r = requests.get(f'{ip}/imports/{id}/towns/stat/percentile/age')
     print(r.text)
 
 
 def make_big_request():
     n = datetime.now()
-    r = requests.post('http://localhost:8080/imports', json={"citizens": [
+    r = requests.post(f'{ip}/imports', json={"citizens": [
         {
             "citizen_id": i,
             "town": "Москва",
@@ -106,7 +106,7 @@ def make_big_request():
 
 if __name__ == '__main__':
     t = datetime.now()
-    id = make_big_request()
+    id = post_all()
     test_get_all(id)
     test_get_birthdays(id)
     make_patch(id)
