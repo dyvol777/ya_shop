@@ -1,3 +1,5 @@
+import argparse
+
 from aiohttp import web
 import json
 from jsonschema import validate
@@ -219,7 +221,11 @@ def main():
     db.init_app(app, config={'password': 'postgres',
                              'database': 'shop'})
     app.add_routes(routes)
-    web.run_app(app)
+    parser = argparse.ArgumentParser(description="aiohttp server")
+    parser.add_argument('--path')
+    parser.add_argument('--port')
+    args = parser.parse_args()
+    web.run_app(app, path=args.path, port=args.port)
 
 
 if __name__ == '__main__':
